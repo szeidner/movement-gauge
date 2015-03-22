@@ -9,7 +9,9 @@
     <color name="dot">@color/scale_tick_major</color>
     <color name="dot_shadow">#18000000</color>
 
-    <color name="hand">@color/dot</color>
-    <color name="hand_shadow">#22000000</color>
+    <color name="needle">@color/dot</color>
+    <color name="needle_shadow">#22000000</color>
+
+    <color name="title">@color/scale_tick_major</color>
 
 </resources>

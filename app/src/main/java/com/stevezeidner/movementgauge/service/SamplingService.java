@@ -6,28 +6,34 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.os.Binder;
 import android.os.IBinder;
-import android.os.IInterface;
-import android.os.Parcel;
-import android.os.RemoteException;
+import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 
-import java.io.FileDescriptor;
-import java.io.PrintWriter;
 import java.util.List;
 
 public class SamplingService extends Service implements SensorEventListener {
-    static final String LOG_TAG = SamplingService.class.getSimpleName();
-    static final boolean DEBUG_GENERAL = true;
-    static final int SAMPLECTR_MOD = 1000;
-
-    private int sampleCounter;
-    private int rate;
     private SensorManager sensorManager;
-    private PrintWriter captureFile;
+
     private Sensor accelSensor;
     private Sensor gyroSensor;
+
     private boolean samplingStarted = false;
+    private int rate;
+    private int sampleCounter;
+
+    private LocalBroadcastManager broadcaster;
+
+    private static final String LOG_TAG = SamplingService.class.getSimpleName();
+    static final public String SAMPLE_RESULT = "com.stevezeidner.movementgauge.service.SamplingService.REQUEST_PROCESSED";
+    static final public String SAMPLE_MESSAGE = "com.stevezeidner.movementgauge.service.SamplingService.MESSAGE";
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        broadcaster = LocalBroadcastManager.getInstance(this);
+    }
 
     public int onStartCommand(Intent intent, int flags, int startId) {
         super.onStartCommand(intent, flags, startId);
@@ -37,7 +43,7 @@ public class SamplingService extends Service implements SensorEventListener {
         stopSampling();
 
         // set the sample rate
-        rate = SensorManager.SENSOR_DELAY_FASTEST;
+        rate = SensorManager.SENSOR_DELAY_NORMAL;
 
         // get sensor manager and start sampling data
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
@@ -88,12 +94,6 @@ public class SamplingService extends Service implements SensorEventListener {
             sensorManager.unregisterListener(this);
         }
 
-        // close out the file we are capturing to
-        if (captureFile != null) {
-            captureFile.close();
-            captureFile = null;
-        }
-
         // keep track of the state of the sampling
         samplingStarted = false;
     }
@@ -125,15 +125,6 @@ public class SamplingService extends Service implements SensorEventListener {
             Log.e(LOG_TAG, "Sensor(s) missing: accelSensor: " + accelSensor + "; gyroSensor: " + gyroSensor);
         }
 
-//        captureFile = null;
-//        File captureFileName = new File(
-//                Environment.getExternalStorageDirectory(),
-//                "capture.csv");
-//        try {
-//            captureFile = new PrintWriter(new FileWriter(captureFileName, false));
-//        } catch (IOException ex) {
-//            Log.e(LOG_TAG, ex.getMessage(), ex);
-//        }
         samplingStarted = true;
     }
 
@@ -152,59 +143,28 @@ public class SamplingService extends Service implements SensorEventListener {
             sensorName = "accel";
         } else if (sensorEvent.sensor == gyroSensor) {
             sensorName = "gyro";
+            sendResult(values[1]);
         }
 
-        Log.i(LOG_TAG, sensorName + ": (" + sensorEvent.timestamp + "), " + values[0] + ", " + values[1] + ", " + values[2]);
+        //Log.i(LOG_TAG, sensorName + ": (" + sensorEvent.timestamp + "), " + values[0] + ", " + values[1] + ", " + values[2]);
 
         updateSampleCounter();
+
+
     }
 
-    private final IBinder serviceBinder = new IBinder() {
-        @Override
-        public String getInterfaceDescriptor() throws RemoteException {
-            return null;
+    public void sendResult(float message) {
+        Intent intent = new Intent(SAMPLE_RESULT);
+        intent.putExtra(SAMPLE_MESSAGE, message);
+        broadcaster.sendBroadcast(intent);
+    }
+
+    public class SamplingBinder extends Binder {
+        SamplingService getService() {
+            return SamplingService.this;
         }
+    }
 
-        @Override
-        public boolean pingBinder() {
-            return false;
-        }
-
-        @Override
-        public boolean isBinderAlive() {
-            return false;
-        }
-
-        @Override
-        public IInterface queryLocalInterface(String descriptor) {
-            return null;
-        }
-
-        @Override
-        public void dump(FileDescriptor fd, String[] args) throws RemoteException {
-
-        }
-
-        @Override
-        public void dumpAsync(FileDescriptor fd, String[] args) throws RemoteException {
-
-        }
-
-        @Override
-        public boolean transact(int code, Parcel data, Parcel reply, int flags) throws RemoteException {
-            return false;
-        }
-
-        @Override
-        public void linkToDeath(DeathRecipient recipient, int flags) throws RemoteException {
-
-        }
-
-        @Override
-        public boolean unlinkToDeath(DeathRecipient recipient, int flags) {
-            return false;
-        }
-    };
-
+    private final IBinder serviceBinder = new SamplingBinder();
 
 }

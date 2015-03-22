@@ -1,17 +1,23 @@
 package com.stevezeidner.movementgauge;
 
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.ActionBarActivity;
 import android.util.Log;
 import android.widget.TextView;
 
 import com.stevezeidner.movementgauge.service.SamplingService;
+import com.stevezeidner.movementgauge.ui.view.GaugeView;
+
+import java.math.BigDecimal;
 
 /**
  * Main Activity for the application that handles starting the data sampling service and
@@ -20,22 +26,35 @@ import com.stevezeidner.movementgauge.service.SamplingService;
 public class MainActivity extends ActionBarActivity {
     private SamplingServiceConnection samplingServiceConnection = null;
     private boolean samplingServiceRunning = false;
+    private boolean samplingServiceBound = false;
     private boolean samplingServiceActivated = false;
-    private TextView sampleCounterTV;
     private String sampleCounterText = null;
+    private BroadcastReceiver receiver;
 
-    static final String LOG_TAG = MainActivity.class.getSimpleName();
-    static final String SAMPLING_SERVICE_ACTIVATED_KEY = "samplingServiceActivated";
-    static final String STEPCOUNT_KEY = "sampleCounter";
+    private TextView tvValue;
+    private GaugeView gaugeView;
 
-    /**
-     * Called when the activity is first created.
-     */
+    private static final String LOG_TAG = MainActivity.class.getSimpleName();
+    private static final String SAMPLING_SERVICE_ACTIVATED_KEY = "samplingServiceActivated";
+    private static final String STEPCOUNT_KEY = "sampleCounter";
+
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        tvValue = (TextView) findViewById(R.id.value);
+        gaugeView = (GaugeView) findViewById(R.id.gauge);
         Log.d(LOG_TAG, "onCreate");
+
+        // create the broadcast receiver to receive updates from the sampling service
+        receiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                Float value = intent.getFloatExtra(SamplingService.SAMPLE_MESSAGE, 0.0f);
+                updateValue(value);
+            }
+        };
 
         if (savedInstanceState != null) {
             sampleCounterText = savedInstanceState.getString(STEPCOUNT_KEY);
@@ -43,14 +62,26 @@ public class MainActivity extends ActionBarActivity {
         } else {
             samplingServiceActivated = false;
         }
-
         Log.d(LOG_TAG, "onCreate; samplingServiceActivated: " + samplingServiceActivated);
 
+        // bind to the sampling service
         bindSamplingService();
 
         SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
 
         startSamplingService();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        LocalBroadcastManager.getInstance(this).registerReceiver((receiver), new IntentFilter(SamplingService.SAMPLE_RESULT));
+    }
+
+    @Override
+    protected void onStop() {
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(receiver);
+        super.onStop();
     }
 
     protected void onSaveInstanceState(Bundle outState) {
@@ -91,12 +122,20 @@ public class MainActivity extends ActionBarActivity {
     private void bindSamplingService() {
         samplingServiceConnection = new SamplingServiceConnection();
         bindService(new Intent(this, SamplingService.class), samplingServiceConnection, Context.BIND_AUTO_CREATE);
+        samplingServiceBound = true;
     }
 
     private void releaseSamplingService() {
         releaseCallbackOnService();
         unbindService(samplingServiceConnection);
         samplingServiceConnection = null;
+        samplingServiceBound = false;
+    }
+
+    private void updateValue(float value) {
+        tvValue.setText("" + round(value, 2));
+        float adjustedValue = Math.abs(value) * 20.0f;
+        gaugeView.setValue(adjustedValue);
     }
 
 
@@ -130,7 +169,12 @@ public class MainActivity extends ActionBarActivity {
         }
     }
 
-    ;
+
+    public static BigDecimal round(float d, int decimalPlace) {
+        BigDecimal bd = new BigDecimal(Float.toString(d));
+        bd = bd.setScale(decimalPlace, BigDecimal.ROUND_HALF_UP);
+        return bd;
+    }
 
 
 }

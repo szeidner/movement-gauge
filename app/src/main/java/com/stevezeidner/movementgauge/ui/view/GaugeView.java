@@ -8,7 +8,6 @@ import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.os.Build;
-import android.os.Handler;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
@@ -33,29 +32,27 @@ public class GaugeView extends View {
     private RectF dotRect;
     private RectF dotShadowRect;
 
-    private Paint handPaint;
-    private Path handPath;
-    private Paint handShadowPaint;
-    private Path handShadowPath;
+    private Paint needlePaint;
+    private Path needlePath;
+    private Paint needleShadowPaint;
+    private Path needleShadowPath;
     private Paint backgroundPaint;
 
     private Bitmap background;
 
-    private Handler handler;
-
     // scale config
     private static final int totalNicks = 80;
     private static final float degreesPerNick = 360.0f / totalNicks;
-    private static final int centerDegree = 0; // the one in the top center (12 o'clock)
-    private static final int minDegrees = -50;
-    private static final int maxDegrees = 50;
+    private static final int centerDegree = 50; // the one in the top center (12 o'clock)
+    private static final int minDegrees = 0;
+    private static final int maxDegrees = 100;
 
-    // hand dynamics -- all are angular expressed in F degrees
-    private float handPosition = 2.3f;
-    private float handTarget = centerDegree;
-    private float handVelocity = 0.0f;
-    private float handAcceleration = 0.0f;
-    private long lastHandMoveTime = -1L;
+    // needle dynamics -- all are angular expressed in F degrees
+    private float needlePosition = 0.0f;
+    private float needleTarget = centerDegree;
+    private float needleVelocity = 0.0f;
+    private float needleAcceleration = 0.0f;
+    private long lastNeedleMoveTime = -1L;
 
     public GaugeView(Context context) {
         super(context);
@@ -73,7 +70,6 @@ public class GaugeView extends View {
     }
 
     private void init() {
-        handler = new Handler();
         initDrawingTools();
     }
 
@@ -130,35 +126,35 @@ public class GaugeView extends View {
         dotRect.set(dotShadowRect.left + dotShadowPadding, dotShadowRect.top + dotShadowPadding,
                 dotShadowRect.right - dotShadowPadding, dotShadowRect.bottom - dotShadowPadding);
 
-        handPaint = new Paint();
-        handPaint.setAntiAlias(true);
-        handPaint.setColor(getResources().getColor(R.color.hand));
-        handPaint.setStyle(Paint.Style.FILL);
+        needlePaint = new Paint();
+        needlePaint.setAntiAlias(true);
+        needlePaint.setColor(getResources().getColor(R.color.needle));
+        needlePaint.setStyle(Paint.Style.FILL);
 
-        handPath = new Path();
-        handPath.moveTo(0.5f + 0.010f, 0.47f);
-        handPath.lineTo(0.5f - 0.010f, 0.47f);
-        handPath.lineTo(0.5f - 0.002f, 0.47f - 0.35f);
-        handPath.lineTo(0.5f + 0.002f, 0.47f - 0.35f);
+        needlePath = new Path();
+        needlePath.moveTo(0.5f + 0.010f, 0.47f);
+        needlePath.lineTo(0.5f - 0.010f, 0.47f);
+        needlePath.lineTo(0.5f - 0.002f, 0.47f - 0.35f);
+        needlePath.lineTo(0.5f + 0.002f, 0.47f - 0.35f);
 
-        handShadowPaint = new Paint();
-        handShadowPaint.setAntiAlias(true);
-        handShadowPaint.setColor(getResources().getColor(R.color.hand_shadow));
-        handShadowPaint.setStyle(Paint.Style.FILL);
+        needleShadowPaint = new Paint();
+        needleShadowPaint.setAntiAlias(true);
+        needleShadowPaint.setColor(getResources().getColor(R.color.needle_shadow));
+        needleShadowPaint.setStyle(Paint.Style.FILL);
 
         float shadowXoffset = 0.007f;
         float shadowYoffset = 0.008f;
-        handShadowPath = new Path();
-        handShadowPath.moveTo(0.5f - shadowXoffset + 0.010f, 0.465f);
-        handShadowPath.lineTo(0.5f - shadowXoffset - 0.010f, 0.465f);
-        handShadowPath.lineTo(0.5f - shadowXoffset - 0.002f, 0.465f - 0.35f - shadowYoffset);
-        handShadowPath.lineTo(0.5f - shadowXoffset + 0.002f, 0.465f - 0.35f - shadowYoffset);
+        needleShadowPath = new Path();
+        needleShadowPath.moveTo(0.5f - shadowXoffset + 0.010f, 0.465f);
+        needleShadowPath.lineTo(0.5f - shadowXoffset - 0.010f, 0.465f);
+        needleShadowPath.lineTo(0.5f - shadowXoffset - 0.002f, 0.465f - 0.35f - shadowYoffset);
+        needleShadowPath.lineTo(0.5f - shadowXoffset + 0.002f, 0.465f - 0.35f - shadowYoffset);
 
         backgroundPaint = new Paint();
         backgroundPaint.setFilterBitmap(true);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
-            setLayerType(LAYER_TYPE_SOFTWARE, handPaint);
+            setLayerType(LAYER_TYPE_SOFTWARE, needlePaint);
         }
     }
 
@@ -265,13 +261,13 @@ public class GaugeView extends View {
         canvas.save(Canvas.MATRIX_SAVE_FLAG);
         canvas.scale(scale, scale);
 
-        drawHand(canvas);
+        drawNeedle(canvas);
 
         canvas.restore();
 
-//        if (handNeedsToMove()) {
-//            moveHand();
-//        }
+        if (needleNeedsToMove()) {
+            moveNeedle();
+        }
     }
 
     @Override
@@ -303,13 +299,59 @@ public class GaugeView extends View {
         drawFace(backgroundCanvas);
     }
 
-    private void drawHand(Canvas canvas) {
-        float handAngle = degreeToAngle(handPosition);
+    private void drawNeedle(Canvas canvas) {
+        float needleAngle = degreeToAngle(needlePosition);
         canvas.save(Canvas.MATRIX_SAVE_FLAG);
-        canvas.rotate(handAngle, 0.5f, 0.5f);
-        canvas.drawPath(handShadowPath, handShadowPaint);
-        canvas.drawPath(handPath, handPaint);
+        canvas.rotate(needleAngle, 0.5f, 0.5f);
+        canvas.drawPath(needleShadowPath, needleShadowPaint);
+        canvas.drawPath(needlePath, needlePaint);
         canvas.restore();
+    }
+
+    private boolean needleNeedsToMove() {
+        return Math.abs(needlePosition - needleTarget) > 0.01f;
+    }
+
+    private void moveNeedle() {
+        if (!needleNeedsToMove()) {
+            return;
+        }
+
+        if (lastNeedleMoveTime != -1L) {
+            long currentTime = System.currentTimeMillis();
+            float delta = (currentTime - lastNeedleMoveTime) / 1000.0f;
+
+            float direction = Math.signum(needleVelocity);
+            if (Math.abs(needleVelocity) < 90.0f) {
+                needleAcceleration = 5.0f * (needleTarget - needlePosition);
+            } else {
+                needleAcceleration = 0.0f;
+            }
+            needlePosition += needleVelocity * delta;
+            needleVelocity += needleAcceleration * delta;
+            if ((needleTarget - needlePosition) * direction < 0.01f * direction) {
+                needlePosition = needleTarget;
+                needleVelocity = 0.0f;
+                needleAcceleration = 0.0f;
+                lastNeedleMoveTime = -1L;
+            } else {
+                lastNeedleMoveTime = System.currentTimeMillis();
+            }
+            invalidate();
+        } else {
+            lastNeedleMoveTime = System.currentTimeMillis();
+            moveNeedle();
+        }
+    }
+    
+    public void setValue(float value) {
+        if (value < minDegrees) {
+            value = minDegrees;
+        } else if (value > maxDegrees) {
+            value = maxDegrees;
+        }
+        needleTarget = value;
+        invalidate();
     }
 
 }
