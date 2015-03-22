@@ -134,8 +134,8 @@ public class MainActivity extends ActionBarActivity {
 
     private void updateValue(float value) {
         tvValue.setText("" + round(value, 2));
-        float adjustedValue = Math.abs(value) * 20.0f;
-        gaugeView.setValue(adjustedValue);
+        //Log.i(LOG_TAG, "value=" + value);
+        gaugeView.setValue(value);
     }
 
 

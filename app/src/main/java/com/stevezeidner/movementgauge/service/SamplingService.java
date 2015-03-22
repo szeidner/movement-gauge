@@ -9,6 +9,7 @@ import android.hardware.SensorManager;
 import android.os.Binder;
 import android.os.IBinder;
 import android.support.v4.content.LocalBroadcastManager;
+import android.util.FloatMath;
 import android.util.Log;
 
 import java.util.List;
@@ -22,7 +23,6 @@ public class SamplingService extends Service implements SensorEventListener {
     private boolean samplingStarted = false;
     private int rate;
     private int sampleCounter;
-
     private LocalBroadcastManager broadcaster;
 
     private static final String LOG_TAG = SamplingService.class.getSimpleName();
@@ -108,7 +108,7 @@ public class SamplingService extends Service implements SensorEventListener {
         sampleCounter = 0;
 
         // get the accelerometer sensor (if it exists)
-        List<Sensor> sensors = sensorManager.getSensorList(Sensor.TYPE_ACCELEROMETER);
+        List<Sensor> sensors = sensorManager.getSensorList(Sensor.TYPE_LINEAR_ACCELERATION);
         accelSensor = sensors.size() == 0 ? null : sensors.get(0);
 
         // get the gyroscope sensor (if it exists)
@@ -138,12 +138,21 @@ public class SamplingService extends Service implements SensorEventListener {
         if (values.length < 3) {
             return;
         }
+
+        // break down the directions
+
         String sensorName = "n/a";
         if (sensorEvent.sensor == accelSensor) {
             sensorName = "accel";
+
+            float x = values[0];
+            float y = values[1];
+            float z = values[2];
+
+            float currentAccel = FloatMath.sqrt(x * x + y * y + z * z) * 10;
+            sendResult(currentAccel);
         } else if (sensorEvent.sensor == gyroSensor) {
             sensorName = "gyro";
-            sendResult(values[1]);
         }
 
         //Log.i(LOG_TAG, sensorName + ": (" + sensorEvent.timestamp + "), " + values[0] + ", " + values[1] + ", " + values[2]);
