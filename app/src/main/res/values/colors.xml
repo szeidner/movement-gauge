@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="scale_tick_minor">#dbdbdb</color>
+    <color name="scale_tick_major">#445469</color>
+
+
+</resources>

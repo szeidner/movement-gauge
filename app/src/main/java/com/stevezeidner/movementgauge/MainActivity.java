@@ -50,7 +50,7 @@ public class MainActivity extends ActionBarActivity {
 
         SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
 
-        startSamplingService();
+        //startSamplingService();
     }
 
     protected void onSaveInstanceState(Bundle outState) {
