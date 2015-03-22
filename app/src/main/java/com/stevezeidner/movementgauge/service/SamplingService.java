@@ -154,7 +154,7 @@ public class SamplingService extends Service implements SensorEventListener {
             sensorName = "gyro";
         }
 
-        Log.i(LOG_TAG, sensorEvent.timestamp + ", " +values[0] + ", " + values[1] + ", " + values[2]);
+        Log.i(LOG_TAG, sensorName + ": (" + sensorEvent.timestamp + "), " + values[0] + ", " + values[1] + ", " + values[2]);
 
         updateSampleCounter();
     }

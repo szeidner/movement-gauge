@@ -7,6 +7,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.os.Build;
 import android.os.Handler;
 import android.util.AttributeSet;
 import android.util.Log;
@@ -21,33 +22,36 @@ public class GaugeView extends View {
 
     private static final String TAG = GaugeView.class.getSimpleName();
 
-    private RectF faceRect;
-
     private Paint scaleMinorTickPaint;
     private Paint scaleMajorTickPaint;
     private Paint scaleValuePaint;
+    private Paint facePaint;
+    private Paint dotPaint;
+    private Paint dotShadowPaint;
     private RectF scaleRect;
+    private RectF faceRect;
+    private RectF dotRect;
+    private RectF dotShadowRect;
 
     private Paint handPaint;
     private Path handPath;
-    private Paint handScrewPaint;
+    private Paint handShadowPaint;
+    private Path handShadowPath;
     private Paint backgroundPaint;
 
     private Bitmap background;
 
     private Handler handler;
 
-    // scale configuration
-// scale configuration
-    private static final int totalNicks = 70;
+    // scale config
+    private static final int totalNicks = 80;
     private static final float degreesPerNick = 360.0f / totalNicks;
-    private static final int centerDegree = 60; // the one in the top center (12 o'clock)
-    private static final int minDegrees = 0;
-    private static final int maxDegrees = 100;
+    private static final int centerDegree = 0; // the one in the top center (12 o'clock)
+    private static final int minDegrees = -50;
+    private static final int maxDegrees = 50;
 
     // hand dynamics -- all are angular expressed in F degrees
-    private boolean handInitialized = false;
-    private float handPosition = centerDegree;
+    private float handPosition = 2.3f;
     private float handTarget = centerDegree;
     private float handVelocity = 0.0f;
     private float handAcceleration = 0.0f;
@@ -74,7 +78,6 @@ public class GaugeView extends View {
     }
 
     private void initDrawingTools() {
-        faceRect = new RectF(0.1f, 0.1f, 0.9f, 0.9f);
 
         scaleMinorTickPaint = new Paint();
         scaleMinorTickPaint.setStyle(Paint.Style.STROKE);
@@ -89,39 +92,74 @@ public class GaugeView extends View {
         scaleMajorTickPaint.setAntiAlias(true);
 
         scaleValuePaint = new Paint();
-        scaleValuePaint.setColor(getResources().getColor(R.color.scale_tick_major));
+        scaleValuePaint.setColor(getResources().getColor(R.color.scale_tick_value));
         scaleValuePaint.setTextSize(0.05f);
-        scaleValuePaint.setTypeface(Typeface.SANS_SERIF);
+        scaleValuePaint.setTypeface(Typeface.defaultFromStyle(Typeface.NORMAL));
         scaleValuePaint.setTextAlign(Paint.Align.CENTER);
         scaleValuePaint.setAntiAlias(true);
 
-        float scalePosition = 0.00f;
-        scaleRect = new RectF();
-        scaleRect.set(faceRect.left + scalePosition, faceRect.top + scalePosition,
-                faceRect.right - scalePosition, faceRect.bottom - scalePosition);
+        scaleRect = new RectF(0.1f, 0.1f, 0.9f, 0.9f);
+
+        facePaint = new Paint();
+        facePaint.setAntiAlias(true);
+        facePaint.setColor(getResources().getColor(R.color.face));
+        facePaint.setStyle(Paint.Style.FILL);
+
+        float scaleSize = 0.15f;
+        faceRect = new RectF();
+        faceRect.set(scaleRect.left + scaleSize, scaleRect.top + scaleSize,
+                scaleRect.right - scaleSize, scaleRect.bottom - scaleSize);
+
+        dotShadowPaint = new Paint();
+        dotShadowPaint.setAntiAlias(true);
+        dotShadowPaint.setColor(getResources().getColor(R.color.dot_shadow));
+        dotShadowPaint.setStyle(Paint.Style.FILL);
+
+        float facePadding = 0.16f;
+        dotShadowRect = new RectF();
+        dotShadowRect.set(faceRect.left + facePadding, faceRect.top + facePadding,
+                faceRect.right - facePadding, faceRect.bottom - facePadding);
+
+        dotPaint = new Paint();
+        dotPaint.setAntiAlias(true);
+        dotPaint.setColor(getResources().getColor(R.color.dot));
+        dotPaint.setStyle(Paint.Style.FILL);
+
+        float dotShadowPadding = 0.05f;
+        dotRect = new RectF();
+        dotRect.set(dotShadowRect.left + dotShadowPadding, dotShadowRect.top + dotShadowPadding,
+                dotShadowRect.right - dotShadowPadding, dotShadowRect.bottom - dotShadowPadding);
 
         handPaint = new Paint();
         handPaint.setAntiAlias(true);
-        handPaint.setColor(0xff392f2c);
-        handPaint.setShadowLayer(0.01f, -0.005f, -0.005f, 0x7f000000);
+        handPaint.setColor(getResources().getColor(R.color.hand));
         handPaint.setStyle(Paint.Style.FILL);
 
         handPath = new Path();
-        handPath.moveTo(0.5f, 0.5f + 0.2f);
-        handPath.lineTo(0.5f - 0.010f, 0.5f + 0.2f - 0.007f);
-        handPath.lineTo(0.5f - 0.002f, 0.5f - 0.32f);
-        handPath.lineTo(0.5f + 0.002f, 0.5f - 0.32f);
-        handPath.lineTo(0.5f + 0.010f, 0.5f + 0.2f - 0.007f);
-        handPath.lineTo(0.5f, 0.5f + 0.2f);
-        handPath.addCircle(0.5f, 0.5f, 0.025f, Path.Direction.CW);
+        handPath.moveTo(0.5f + 0.010f, 0.47f);
+        handPath.lineTo(0.5f - 0.010f, 0.47f);
+        handPath.lineTo(0.5f - 0.002f, 0.47f - 0.35f);
+        handPath.lineTo(0.5f + 0.002f, 0.47f - 0.35f);
 
-        handScrewPaint = new Paint();
-        handScrewPaint.setAntiAlias(true);
-        handScrewPaint.setColor(0xff493f3c);
-        handScrewPaint.setStyle(Paint.Style.FILL);
+        handShadowPaint = new Paint();
+        handShadowPaint.setAntiAlias(true);
+        handShadowPaint.setColor(getResources().getColor(R.color.hand_shadow));
+        handShadowPaint.setStyle(Paint.Style.FILL);
+
+        float shadowXoffset = 0.007f;
+        float shadowYoffset = 0.008f;
+        handShadowPath = new Path();
+        handShadowPath.moveTo(0.5f - shadowXoffset + 0.010f, 0.465f);
+        handShadowPath.lineTo(0.5f - shadowXoffset - 0.010f, 0.465f);
+        handShadowPath.lineTo(0.5f - shadowXoffset - 0.002f, 0.465f - 0.35f - shadowYoffset);
+        handShadowPath.lineTo(0.5f - shadowXoffset + 0.002f, 0.465f - 0.35f - shadowYoffset);
 
         backgroundPaint = new Paint();
         backgroundPaint.setFilterBitmap(true);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+            setLayerType(LAYER_TYPE_SOFTWARE, handPaint);
+        }
     }
 
 
@@ -154,8 +192,6 @@ public class GaugeView extends View {
     }
 
     private void drawScale(Canvas canvas) {
-        //canvas.drawOval(scaleRect, scalePaint);
-
         canvas.save(Canvas.MATRIX_SAVE_FLAG);
         for (int i = 0; i < totalNicks; ++i) {
             float y1Major = scaleRect.top;
@@ -182,12 +218,17 @@ public class GaugeView extends View {
         canvas.restore();
     }
 
+    private void drawFace(Canvas canvas) {
+        canvas.drawOval(faceRect, facePaint);
+        canvas.drawOval(dotShadowRect, dotShadowPaint);
+        canvas.drawOval(dotRect, dotPaint);
+    }
+
     public static void drawTextOnCanvasWithMagnifier(Canvas canvas, String text, float x, float y, Paint paint) {
-        if (android.os.Build.VERSION.SDK_INT <= 15) {
+        if (android.os.Build.VERSION.SDK_INT <= Build.VERSION_CODES.ICE_CREAM_SANDWICH_MR1) {
             //draw normally
             canvas.drawText(text, x, y, paint);
-        }
-        else {
+        } else {
             //workaround
             float originalTextSize = paint.getTextSize();
             final float magnifier = 1000f;
@@ -224,7 +265,7 @@ public class GaugeView extends View {
         canvas.save(Canvas.MATRIX_SAVE_FLAG);
         canvas.scale(scale, scale);
 
-//        drawHand(canvas);
+        drawHand(canvas);
 
         canvas.restore();
 
@@ -259,6 +300,16 @@ public class GaugeView extends View {
         backgroundCanvas.scale(scale, scale);
 
         drawScale(backgroundCanvas);
+        drawFace(backgroundCanvas);
+    }
+
+    private void drawHand(Canvas canvas) {
+        float handAngle = degreeToAngle(handPosition);
+        canvas.save(Canvas.MATRIX_SAVE_FLAG);
+        canvas.rotate(handAngle, 0.5f, 0.5f);
+        canvas.drawPath(handShadowPath, handShadowPaint);
+        canvas.drawPath(handPath, handPaint);
+        canvas.restore();
     }
 
 }
