@@ -12,6 +12,8 @@ import android.support.v4.content.LocalBroadcastManager;
 import android.util.FloatMath;
 import android.util.Log;
 
+import com.stevezeidner.movementgauge.core.Constants;
+
 import java.util.List;
 
 /**
@@ -19,22 +21,14 @@ import java.util.List;
  */
 public class SamplingService extends Service implements SensorEventListener {
     private SensorManager sensorManager;
-
     private Sensor accelSensor;
+    private LocalBroadcastManager broadcaster;
 
     private boolean samplingStarted = false;
     private int rate;
-    private int sampleCounter;
-    private LocalBroadcastManager broadcaster;
-
     private float cumulative;
 
     private static final String LOG_TAG = SamplingService.class.getSimpleName();
-    static final public String SAMPLE_RESULT = "com.stevezeidner.movementgauge.service.SamplingService.REQUEST_PROCESSED";
-    static final public String SAMPLE_VALUE = "com.stevezeidner.movementgauge.service.SamplingService.SAMPLE_VALUE";
-    static final public String CUMULATIVE_VALUE = "com.stevezeidner.movementgauge.service.SamplingService.CUMULATIVE_VALUE";
-    static final public String TIMESTAMP_VALUE = "com.stevezeidner.movementgauge.service.SamplingService.TIMESTAMP_VALUE";
-    static final public String CUMULATIVE_STARTUP_VALUE = "com.stevezeidner.movementgauge.service.SamplingService.CUMULATIVE_STARTUP_VALUE";
 
     @Override
     public void onCreate() {
@@ -47,7 +41,7 @@ public class SamplingService extends Service implements SensorEventListener {
         Log.d(LOG_TAG, "onStartCommand");
 
         // get the cumulative value from the intent
-        cumulative = intent.getFloatExtra(CUMULATIVE_STARTUP_VALUE, 0.0f);;
+        cumulative = intent.getFloatExtra(Constants.CUMULATIVE_STARTUP_VALUE, 0.0f);;
 
         // in case the activity-level service management fails
         stopSampling();
@@ -113,9 +107,6 @@ public class SamplingService extends Service implements SensorEventListener {
             return;
         }
 
-        // reset sample counter
-        sampleCounter = 0;
-
         // get the accelerometer sensor (if it exists)
         List<Sensor> sensors = sensorManager.getSensorList(Sensor.TYPE_LINEAR_ACCELERATION);
         accelSensor = sensors.size() == 0 ? null : sensors.get(0);
@@ -132,11 +123,10 @@ public class SamplingService extends Service implements SensorEventListener {
         samplingStarted = true;
     }
 
-
-    private void updateSampleCounter() {
-        ++sampleCounter;
-    }
-
+    /**
+     * Do something interesting with the event sample
+     * @param sensorEvent
+     */
     private void processSample(SensorEvent sensorEvent) {
         float values[] = sensorEvent.values;
         if (values.length < 3) {
@@ -155,8 +145,6 @@ public class SamplingService extends Service implements SensorEventListener {
 
         // broadcast the calculated value
         sendResult(scaledAccel, cumulative, sensorEvent.timestamp);
-
-        updateSampleCounter();
     }
 
     /**
@@ -166,10 +154,10 @@ public class SamplingService extends Service implements SensorEventListener {
      * @param cumulative Float of the cumulative values since app started
      */
     public void sendResult(float sample, float cumulative, long timestamp) {
-        Intent intent = new Intent(SAMPLE_RESULT);
-        intent.putExtra(TIMESTAMP_VALUE, timestamp);
-        intent.putExtra(SAMPLE_VALUE, sample);
-        intent.putExtra(CUMULATIVE_VALUE, cumulative);
+        Intent intent = new Intent(Constants.SAMPLE_RESULT);
+        intent.putExtra(Constants.TIMESTAMP_VALUE, timestamp);
+        intent.putExtra(Constants.SAMPLE_VALUE, sample);
+        intent.putExtra(Constants.CUMULATIVE_VALUE, cumulative);
         broadcaster.sendBroadcast(intent);
     }
 

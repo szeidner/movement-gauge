@@ -11,7 +11,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Created by szeidner on 22/03/15.
+ * Service to abstract some of PubNub's functionality
  */
 public class PubNub {
     private Pubnub pubnub;
@@ -28,8 +28,6 @@ public class PubNub {
         );
 
         this.channel = channel;
-
-        Subscribe();
     }
 
     public void Subscribe() {

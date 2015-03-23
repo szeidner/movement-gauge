@@ -13,6 +13,7 @@ import android.util.Log;
 import android.view.View;
 
 import com.stevezeidner.movementgauge.R;
+import com.stevezeidner.movementgauge.core.Utility;
 
 /**
  * View that draws a gauge and controls the needle
@@ -47,7 +48,7 @@ public class GaugeView extends View {
     private static final int minDegrees = 0;
     private static final int maxDegrees = 100;
 
-    // needle dynamics -- all are angular expressed in F degrees
+    // needle dynamics
     private float needlePosition = 0.0f;
     private float needleTarget = centerDegree;
     private float needleVelocity = 0.0f;
@@ -73,6 +74,9 @@ public class GaugeView extends View {
         initDrawingTools();
     }
 
+    /**
+     * Initiate drawing tools
+     */
     private void initDrawingTools() {
 
         scaleMinorTickPaint = new Paint();
@@ -184,6 +188,11 @@ public class GaugeView extends View {
         }
     }
 
+    /**
+     * Draw the scale for the guage based on configuration values
+     *
+     * @param canvas
+     */
     private void drawScale(Canvas canvas) {
         canvas.save(Canvas.MATRIX_SAVE_FLAG);
         for (int i = 0; i < totalNicks; ++i) {
@@ -198,7 +207,7 @@ public class GaugeView extends View {
                 if (value >= minDegrees && value <= maxDegrees) {
                     canvas.drawLine(0.5f, y1Major, 0.5f, y2Major, scaleMajorTickPaint);
                     String valueString = Integer.toString(value);
-                    drawTextOnCanvasWithMagnifier(canvas, valueString, 0.5f, y1Major + 0.06f, scaleValuePaint);
+                    Utility.drawTextOnCanvasWithMagnifier(canvas, valueString, 0.5f, y1Major + 0.06f, scaleValuePaint);
                 }
             } else {
                 if (value >= minDegrees && value <= maxDegrees) {
@@ -211,35 +220,36 @@ public class GaugeView extends View {
         canvas.restore();
     }
 
+    /**
+     * Draw the guage face (3 circles)
+     *
+     * @param canvas
+     */
     private void drawFace(Canvas canvas) {
         canvas.drawOval(faceRect, facePaint);
         canvas.drawOval(dotShadowRect, dotShadowPaint);
         canvas.drawOval(dotRect, dotPaint);
     }
 
-    public static void drawTextOnCanvasWithMagnifier(Canvas canvas, String text, float x, float y, Paint paint) {
-        if (android.os.Build.VERSION.SDK_INT <= Build.VERSION_CODES.ICE_CREAM_SANDWICH_MR1) {
-            //draw normally
-            canvas.drawText(text, x, y, paint);
-        } else {
-            //workaround
-            float originalTextSize = paint.getTextSize();
-            final float magnifier = 1000f;
-            canvas.save();
-            canvas.scale(1f / magnifier, 1f / magnifier);
-            paint.setTextSize(originalTextSize * magnifier);
-            canvas.drawText(text, x * magnifier, y * magnifier, paint);
-            canvas.restore();
-            paint.setTextSize(originalTextSize);
-        }
-    }
 
+    /**
+     * Calculate degree from a value
+     *
+     * @param nick
+     * @return
+     */
     private int nickToDegree(int nick) {
         int rawDegree = ((nick < totalNicks / 2) ? nick : (nick - totalNicks)) * 2;
         int shiftedDegree = rawDegree + centerDegree;
         return shiftedDegree;
     }
 
+    /**
+     * Calculate angle from a degree
+     *
+     * @param degree
+     * @return
+     */
     private float degreeToAngle(float degree) {
         return (degree - centerDegree) / 2.0f * degreesPerNick;
     }
@@ -250,6 +260,11 @@ public class GaugeView extends View {
     }
 
 
+    /**
+     * Draw background bitmap and move needle if needed
+     *
+     * @param canvas
+     */
     @Override
     protected void onDraw(Canvas canvas) {
         drawBackground(canvas);
@@ -273,6 +288,11 @@ public class GaugeView extends View {
         regenerateBackground();
     }
 
+    /**
+     * Draw the background bitmap to the canvas
+     *
+     * @param canvas
+     */
     private void drawBackground(Canvas canvas) {
         if (background == null) {
             Log.w(TAG, "Background not created");
@@ -281,6 +301,9 @@ public class GaugeView extends View {
         }
     }
 
+    /**
+     * Create scale and face of the gauge as a bitmap
+     */
     private void regenerateBackground() {
         // free the old bitmap
         if (background != null) {
@@ -296,6 +319,11 @@ public class GaugeView extends View {
         drawFace(backgroundCanvas);
     }
 
+    /**
+     * Draw needle and rotate to the needleAngle
+     *
+     * @param canvas
+     */
     private void drawNeedle(Canvas canvas) {
         float needleAngle = degreeToAngle(needlePosition);
         canvas.save(Canvas.MATRIX_SAVE_FLAG);
@@ -305,10 +333,18 @@ public class GaugeView extends View {
         canvas.restore();
     }
 
+    /**
+     * See if the position has changed enough that we should actually move the needle
+     *
+     * @return
+     */
     private boolean needleNeedsToMove() {
         return Math.abs(needlePosition - needleTarget) > 0.01f;
     }
 
+    /**
+     * Move the needle smoothly
+     */
     private void moveNeedle() {
         if (!needleNeedsToMove()) {
             return;
@@ -340,7 +376,12 @@ public class GaugeView extends View {
             moveNeedle();
         }
     }
-    
+
+    /**
+     * Set current value that the needle should point to
+     *
+     * @param value
+     */
     public void setValue(float value) {
         if (value < minDegrees) {
             value = minDegrees;
@@ -351,6 +392,11 @@ public class GaugeView extends View {
         invalidate();
     }
 
+    /**
+     * Change color of the gauge face
+     *
+     * @param color
+     */
     public void setFaceColor(int color) {
         facePaint.setColor(color);
         regenerateBackground();

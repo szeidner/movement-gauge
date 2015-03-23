@@ -18,6 +18,8 @@ import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.TextView;
 
+import com.stevezeidner.movementgauge.core.Constants;
+import com.stevezeidner.movementgauge.core.Utility;
 import com.stevezeidner.movementgauge.network.PubNub;
 import com.stevezeidner.movementgauge.service.SamplingService;
 import com.stevezeidner.movementgauge.ui.view.GaugeView;
@@ -26,125 +28,110 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.math.BigDecimal;
-
 /**
  * Main Activity for the application that handles starting the data sampling service and
  * managing the main layout.
  */
 public class MainActivity extends ActionBarActivity {
+    // service and receiver
     private SamplingServiceConnection samplingServiceConnection = null;
     private Intent samplingServiceIntent = null;
-    private ComponentName service = null;
     private boolean samplingServiceRunning = false;
-    private boolean samplingServiceBound = false;
-    private boolean samplingServiceActivated = false;
-    private String sampleCounterText = null;
     private BroadcastReceiver receiver;
 
-    private PubNub pubnub = null;
-
+    // views
     private TextView tvValue, gaugeTitle;
     private GaugeView gaugeView;
     private SwitchCompat toggle;
     private Button reset;
 
+    // log tag
     private static final String LOG_TAG = MainActivity.class.getSimpleName();
-    private static final String SAMPLING_SERVICE_ACTIVATED_KEY = "samplingServiceActivated";
-    private static final String STEPCOUNT_KEY = "sampleCounter";
-    private static final String CUMULATIVE_PREFS_KEY = "Cumulative";
 
+    // used to keep track of current state
     private boolean cumulativeMode = false;
-
     private float cumulative;
     private float lastValue;
     private long lastPushedTime;
 
+    // network request parameters
     private JSONArray queue;
+    private PubNub pubnub = null;
 
-    SharedPreferences sharedPref;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // set our content layout
         setContentView(R.layout.activity_main);
+
+        // grab views
         tvValue = (TextView) findViewById(R.id.value);
         gaugeTitle = (TextView) findViewById(R.id.gauge_title);
         gaugeView = (GaugeView) findViewById(R.id.gauge);
         toggle = (SwitchCompat) findViewById(R.id.toggle);
         reset = (Button) findViewById(R.id.reset);
-        Log.d(LOG_TAG, "onCreate");
 
+        // configure the broadcast receiver and any click listeners on view objects
         initBroadcastReceivers();
         initClickListeners();
 
-        // restore state
-        if (savedInstanceState != null) {
-            sampleCounterText = savedInstanceState.getString(STEPCOUNT_KEY);
-            samplingServiceActivated = savedInstanceState.getBoolean(SAMPLING_SERVICE_ACTIVATED_KEY, false);
-        } else {
-            samplingServiceActivated = false;
-        }
-        Log.d(LOG_TAG, "onCreate; samplingServiceActivated: " + samplingServiceActivated);
-
         // start pubnub service
         pubnub = new PubNub(
-                "pub-c-3031c78d-7e71-43ac-8e87-9657a7bbc7b6",
-                "sub-c-40913ce6-d10d-11e4-9f3d-0619f8945a4f",
-                "sec-c-OTRlZjUyNGQtNDRiNi00N2ZiLWE2Y2EtYTI1NDAzMTAwNGU0",
+                Constants.PUBNUB_PUB,
+                Constants.PUBNUB_SUB,
+                Constants.PUBNUB_SEC,
                 true,
-                "accelerometer"
+                Constants.PUBNUB_CHANNEL
         );
 
-        sharedPref = getPreferences(Context.MODE_PRIVATE);
-
+        // initialize queue
         queue = new JSONArray();
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-
-        // bind to the sampling service
-        bindSamplingService();
-
-        startSamplingService();
-
-        lastPushedTime = System.currentTimeMillis();
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        LocalBroadcastManager.getInstance(this).registerReceiver((receiver), new IntentFilter(SamplingService.SAMPLE_RESULT));
+        LocalBroadcastManager.getInstance(this).registerReceiver((receiver), new IntentFilter(Constants.SAMPLE_RESULT));
+
+        // subscribe to pubnub
+        if (pubnub != null) {
+            pubnub.Subscribe();
+        }
+
+        // bind to the sampling service
+        bindSamplingService();
+
+        // start sampling points
+        startSamplingService();
+
+        // reset the last pushed time to right now
+        lastPushedTime = System.currentTimeMillis();
     }
 
     @Override
     protected void onStop() {
         LocalBroadcastManager.getInstance(this).unregisterReceiver(receiver);
-        super.onStop();
-    }
 
-    @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        Log.d(LOG_TAG, "onSaveInstanceState");
-
-        outState.putBoolean(SAMPLING_SERVICE_ACTIVATED_KEY, samplingServiceActivated);
-
-        if (sampleCounterText != null) {
-            outState.putString(STEPCOUNT_KEY, sampleCounterText);
-        }
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        Log.d(LOG_TAG, "onPause");
+        // stop sampline points
         stopSamplingService();
+
+        // release the service
         releaseSamplingService();
 
+        // flush PubNub queue
+        flushQueue();
+
+        // unsubscribe from pubnub
+        if (pubnub != null) {
+            pubnub.Unsubscribe();
+        }
+
+        // write our cumulative value to shared preferences for retrieval later
         writeCumulative(cumulative);
+
+        super.onStop();
     }
 
     /**
@@ -154,10 +141,10 @@ public class MainActivity extends ActionBarActivity {
         receiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                float value = intent.getFloatExtra(SamplingService.SAMPLE_VALUE, 0.0f);
+                float value = intent.getFloatExtra(Constants.SAMPLE_VALUE, 0.0f);
                 ;
-                long timestamp = intent.getLongExtra(SamplingService.TIMESTAMP_VALUE, 0);
-                cumulative = intent.getFloatExtra(SamplingService.CUMULATIVE_VALUE, 0.0f);
+                long timestamp = intent.getLongExtra(Constants.TIMESTAMP_VALUE, 0);
+                cumulative = intent.getFloatExtra(Constants.CUMULATIVE_VALUE, 0.0f);
                 if (cumulativeMode) {
                     updateValue(cumulative);
                 } else {
@@ -194,11 +181,17 @@ public class MainActivity extends ActionBarActivity {
         long currentTime = System.currentTimeMillis();
         float deltaTime = (currentTime - lastPushedTime) / 1000.0f;
 
-        if (queue.length() >= 100 || (deltaTime >= 10 && queue.length() > 0)) {
-            pubnub.Publish(queue);
-            queue = new JSONArray();
+        // if the queue is growing large or it has been some reasonable amount of time since the last publish, then publish again
+        if (queue.length() >= 100 ||
+                (queue.length() > 0 && deltaTime >= Utility.randomBetween(Constants.LOW_SEND_TIME, Constants.HIGH_SEND_TIME))) {
+            flushQueue();
             lastPushedTime = currentTime;
         }
+    }
+
+    private void flushQueue() {
+        pubnub.Publish(queue);
+        queue = new JSONArray();
     }
 
     /**
@@ -255,7 +248,7 @@ public class MainActivity extends ActionBarActivity {
             stopSamplingService();
         }
         samplingServiceIntent = new Intent(this, SamplingService.class);
-        samplingServiceIntent.putExtra(SamplingService.CUMULATIVE_STARTUP_VALUE, readCumulative());
+        samplingServiceIntent.putExtra(Constants.CUMULATIVE_STARTUP_VALUE, readCumulative());
         startService(samplingServiceIntent);
         samplingServiceRunning = true;
     }
@@ -279,7 +272,6 @@ public class MainActivity extends ActionBarActivity {
     private void bindSamplingService() {
         samplingServiceConnection = new SamplingServiceConnection();
         bindService(new Intent(this, SamplingService.class), samplingServiceConnection, Context.BIND_AUTO_CREATE);
-        samplingServiceBound = true;
     }
 
     /**
@@ -288,7 +280,6 @@ public class MainActivity extends ActionBarActivity {
     private void releaseSamplingService() {
         unbindService(samplingServiceConnection);
         samplingServiceConnection = null;
-        samplingServiceBound = false;
     }
 
     /**
@@ -297,7 +288,7 @@ public class MainActivity extends ActionBarActivity {
      * @param value Float of movement value
      */
     private void updateValue(float value) {
-        tvValue.setText("" + round(value, 2));
+        tvValue.setText("" + Utility.round(value, 2));
         gaugeView.setValue(value);
     }
 
@@ -309,7 +300,7 @@ public class MainActivity extends ActionBarActivity {
     private void writeCumulative(float value) {
         SharedPreferences sharedPref = getPreferences(Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = sharedPref.edit();
-        editor.putFloat(CUMULATIVE_PREFS_KEY, value);
+        editor.putFloat(Constants.CUMULATIVE_PREFS_KEY, value);
         editor.commit();
     }
 
@@ -320,7 +311,7 @@ public class MainActivity extends ActionBarActivity {
      */
     private float readCumulative() {
         SharedPreferences sharedPref = getPreferences(Context.MODE_PRIVATE);
-        return sharedPref.getFloat(CUMULATIVE_PREFS_KEY, 0);
+        return sharedPref.getFloat(Constants.CUMULATIVE_PREFS_KEY, 0);
     }
 
     /**
@@ -337,17 +328,5 @@ public class MainActivity extends ActionBarActivity {
         }
     }
 
-    /**
-     * Round to certain number of decimals
-     *
-     * @param d
-     * @param decimalPlace
-     * @return
-     */
-    public static float round(float d, int decimalPlace) {
-        BigDecimal bd = new BigDecimal(Float.toString(d));
-        bd = bd.setScale(decimalPlace, BigDecimal.ROUND_HALF_UP);
-        return bd.floatValue();
-    }
 
 }
