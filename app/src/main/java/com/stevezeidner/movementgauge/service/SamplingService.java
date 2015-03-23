@@ -33,6 +33,8 @@ public class SamplingService extends Service implements SensorEventListener {
     static final public String SAMPLE_RESULT = "com.stevezeidner.movementgauge.service.SamplingService.REQUEST_PROCESSED";
     static final public String SAMPLE_VALUE = "com.stevezeidner.movementgauge.service.SamplingService.SAMPLE_VALUE";
     static final public String CUMULATIVE_VALUE = "com.stevezeidner.movementgauge.service.SamplingService.CUMULATIVE_VALUE";
+    static final public String TIMESTAMP_VALUE = "com.stevezeidner.movementgauge.service.SamplingService.TIMESTAMP_VALUE";
+    static final public String CUMULATIVE_STARTUP_VALUE = "com.stevezeidner.movementgauge.service.SamplingService.CUMULATIVE_STARTUP_VALUE";
 
     @Override
     public void onCreate() {
@@ -43,6 +45,9 @@ public class SamplingService extends Service implements SensorEventListener {
     public int onStartCommand(Intent intent, int flags, int startId) {
         super.onStartCommand(intent, flags, startId);
         Log.d(LOG_TAG, "onStartCommand");
+
+        // get the cumulative value from the intent
+        cumulative = intent.getFloatExtra(CUMULATIVE_STARTUP_VALUE, 0.0f);;
 
         // in case the activity-level service management fails
         stopSampling();
@@ -144,12 +149,12 @@ public class SamplingService extends Service implements SensorEventListener {
         float z = values[2];
 
         // normalize the 3D accelerometer data into just one value
-        float normAccel = FloatMath.floor(FloatMath.sqrt(x * x + y * y + z * z));
-        float scaledAccel = normAccel * 10;
-        cumulative += normAccel * 0.01; // scale this back so we have more interesting numbers to look at
+        float normAccel = FloatMath.sqrt(x * x + y * y + z * z);
+        float scaledAccel = FloatMath.floor(normAccel * 10);
+        cumulative += FloatMath.floor(normAccel) * 0.01; // scale this back so we have more interesting numbers to look at
 
         // broadcast the calculated value
-        sendResult(scaledAccel, cumulative);
+        sendResult(scaledAccel, cumulative, sensorEvent.timestamp);
 
         updateSampleCounter();
     }
@@ -160,8 +165,9 @@ public class SamplingService extends Service implements SensorEventListener {
      * @param sample Float of the current sample value
      * @param cumulative Float of the cumulative values since app started
      */
-    public void sendResult(float sample, float cumulative) {
+    public void sendResult(float sample, float cumulative, long timestamp) {
         Intent intent = new Intent(SAMPLE_RESULT);
+        intent.putExtra(TIMESTAMP_VALUE, timestamp);
         intent.putExtra(SAMPLE_VALUE, sample);
         intent.putExtra(CUMULATIVE_VALUE, cumulative);
         broadcaster.sendBroadcast(intent);
@@ -175,4 +181,7 @@ public class SamplingService extends Service implements SensorEventListener {
 
     private final IBinder serviceBinder = new SamplingBinder();
 
+    public void setCumulative(float cumulative) {
+        this.cumulative = cumulative;
+    }
 }

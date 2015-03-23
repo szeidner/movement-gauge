@@ -6,17 +6,25 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.ActionBarActivity;
 import android.support.v7.widget.SwitchCompat;
 import android.util.Log;
+import android.view.View;
+import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.TextView;
 
+import com.stevezeidner.movementgauge.network.PubNub;
 import com.stevezeidner.movementgauge.service.SamplingService;
 import com.stevezeidner.movementgauge.ui.view.GaugeView;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.math.BigDecimal;
 
@@ -34,16 +42,27 @@ public class MainActivity extends ActionBarActivity {
     private String sampleCounterText = null;
     private BroadcastReceiver receiver;
 
+    private PubNub pubnub = null;
+
     private TextView tvValue, gaugeTitle;
     private GaugeView gaugeView;
     private SwitchCompat toggle;
+    private Button reset;
 
     private static final String LOG_TAG = MainActivity.class.getSimpleName();
     private static final String SAMPLING_SERVICE_ACTIVATED_KEY = "samplingServiceActivated";
     private static final String STEPCOUNT_KEY = "sampleCounter";
+    private static final String CUMULATIVE_PREFS_KEY = "Cumulative";
 
     private boolean cumulativeMode = false;
 
+    private float cumulative;
+    private float lastValue;
+    private long lastPushedTime;
+
+    private JSONArray queue;
+
+    SharedPreferences sharedPref;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -53,6 +72,7 @@ public class MainActivity extends ActionBarActivity {
         gaugeTitle = (TextView) findViewById(R.id.gauge_title);
         gaugeView = (GaugeView) findViewById(R.id.gauge);
         toggle = (SwitchCompat) findViewById(R.id.toggle);
+        reset = (Button) findViewById(R.id.reset);
         Log.d(LOG_TAG, "onCreate");
 
         initBroadcastReceivers();
@@ -67,10 +87,30 @@ public class MainActivity extends ActionBarActivity {
         }
         Log.d(LOG_TAG, "onCreate; samplingServiceActivated: " + samplingServiceActivated);
 
+        // start pubnub service
+        pubnub = new PubNub(
+                "pub-c-3031c78d-7e71-43ac-8e87-9657a7bbc7b6",
+                "sub-c-40913ce6-d10d-11e4-9f3d-0619f8945a4f",
+                "sec-c-OTRlZjUyNGQtNDRiNi00N2ZiLWE2Y2EtYTI1NDAzMTAwNGU0",
+                true,
+                "accelerometer"
+        );
+
+        sharedPref = getPreferences(Context.MODE_PRIVATE);
+
+        queue = new JSONArray();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
         // bind to the sampling service
         bindSamplingService();
 
         startSamplingService();
+
+        lastPushedTime = System.currentTimeMillis();
     }
 
     @Override
@@ -98,10 +138,13 @@ public class MainActivity extends ActionBarActivity {
     }
 
     @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        Log.d(LOG_TAG, "onDestroy");
+    protected void onPause() {
+        super.onPause();
+        Log.d(LOG_TAG, "onPause");
+        stopSamplingService();
         releaseSamplingService();
+
+        writeCumulative(cumulative);
     }
 
     /**
@@ -111,15 +154,51 @@ public class MainActivity extends ActionBarActivity {
         receiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                Float value;
+                float value = intent.getFloatExtra(SamplingService.SAMPLE_VALUE, 0.0f);
+                ;
+                long timestamp = intent.getLongExtra(SamplingService.TIMESTAMP_VALUE, 0);
+                cumulative = intent.getFloatExtra(SamplingService.CUMULATIVE_VALUE, 0.0f);
                 if (cumulativeMode) {
-                    value = intent.getFloatExtra(SamplingService.CUMULATIVE_VALUE, 0.0f);
+                    updateValue(cumulative);
                 } else {
-                    value = intent.getFloatExtra(SamplingService.SAMPLE_VALUE, 0.0f);
+                    updateValue(value);
                 }
-                updateValue(value);
+
+                addToQueue(timestamp, value);
             }
         };
+    }
+
+    /**
+     * Add value to a queue that gets flushed to pubnub every so often
+     *
+     * @param timestamp
+     * @param value
+     */
+    private void addToQueue(long timestamp, float value) {
+
+        if (value != lastValue) {
+            // add data to queue if the value has changed
+            JSONObject data = new JSONObject();
+            try {
+                data.put("time", timestamp);
+                data.put("value", value);
+            } catch (JSONException ignore) {
+            }
+
+            queue.put(data);
+        }
+
+        lastValue = value;
+
+        long currentTime = System.currentTimeMillis();
+        float deltaTime = (currentTime - lastPushedTime) / 1000.0f;
+
+        if (queue.length() >= 100 || (deltaTime >= 10 && queue.length() > 0)) {
+            pubnub.Publish(queue);
+            queue = new JSONArray();
+            lastPushedTime = currentTime;
+        }
     }
 
     /**
@@ -136,6 +215,15 @@ public class MainActivity extends ActionBarActivity {
                 }
             }
         });
+
+        reset.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                cumulative = 0;
+                writeCumulative(cumulative);
+                startSamplingService();
+            }
+        });
     }
 
     /**
@@ -145,6 +233,7 @@ public class MainActivity extends ActionBarActivity {
         cumulativeMode = true;
         gaugeTitle.setText(getResources().getString(R.string.cumulative_title));
         gaugeView.setFaceColor(getResources().getColor(R.color.face_cumulative));
+        reset.setVisibility(View.VISIBLE);
     }
 
     /**
@@ -154,6 +243,7 @@ public class MainActivity extends ActionBarActivity {
         cumulativeMode = false;
         gaugeTitle.setText(getResources().getString(R.string.instantaneous_title));
         gaugeView.setFaceColor(getResources().getColor(R.color.face_instantaneous));
+        reset.setVisibility(View.GONE);
     }
 
     /**
@@ -165,6 +255,7 @@ public class MainActivity extends ActionBarActivity {
             stopSamplingService();
         }
         samplingServiceIntent = new Intent(this, SamplingService.class);
+        samplingServiceIntent.putExtra(SamplingService.CUMULATIVE_STARTUP_VALUE, readCumulative());
         startService(samplingServiceIntent);
         samplingServiceRunning = true;
     }
@@ -192,7 +283,7 @@ public class MainActivity extends ActionBarActivity {
     }
 
     /**
-     * Unbind sampline service
+     * Unbind sampling service
      */
     private void releaseSamplingService() {
         unbindService(samplingServiceConnection);
@@ -210,6 +301,27 @@ public class MainActivity extends ActionBarActivity {
         gaugeView.setValue(value);
     }
 
+    /**
+     * Write the cumulative value to shared prefs
+     *
+     * @param value float value to write to shared prefs
+     */
+    private void writeCumulative(float value) {
+        SharedPreferences sharedPref = getPreferences(Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = sharedPref.edit();
+        editor.putFloat(CUMULATIVE_PREFS_KEY, value);
+        editor.commit();
+    }
+
+    /**
+     * Read cumulative value from shared preferences
+     *
+     * @return float of cumulative value from stored shared prefs
+     */
+    private float readCumulative() {
+        SharedPreferences sharedPref = getPreferences(Context.MODE_PRIVATE);
+        return sharedPref.getFloat(CUMULATIVE_PREFS_KEY, 0);
+    }
 
     /**
      * Connection to sampling service

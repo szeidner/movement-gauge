@@ -3,4 +3,6 @@
 
     <string name="instantaneous_title">Instantaneous</string>
     <string name="cumulative_title">Cumulative (x1000)</string>
+
+    <string name="reset">Reset</string>
 </resources>
