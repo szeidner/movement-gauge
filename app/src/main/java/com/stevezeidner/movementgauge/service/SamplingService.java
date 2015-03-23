@@ -14,20 +14,25 @@ import android.util.Log;
 
 import java.util.List;
 
+/**
+ * Sample data from the accelerometer sensor and broadcast a normalized value
+ */
 public class SamplingService extends Service implements SensorEventListener {
     private SensorManager sensorManager;
 
     private Sensor accelSensor;
-    private Sensor gyroSensor;
 
     private boolean samplingStarted = false;
     private int rate;
     private int sampleCounter;
     private LocalBroadcastManager broadcaster;
 
+    private float cumulative;
+
     private static final String LOG_TAG = SamplingService.class.getSimpleName();
     static final public String SAMPLE_RESULT = "com.stevezeidner.movementgauge.service.SamplingService.REQUEST_PROCESSED";
-    static final public String SAMPLE_MESSAGE = "com.stevezeidner.movementgauge.service.SamplingService.MESSAGE";
+    static final public String SAMPLE_VALUE = "com.stevezeidner.movementgauge.service.SamplingService.SAMPLE_VALUE";
+    static final public String CUMULATIVE_VALUE = "com.stevezeidner.movementgauge.service.SamplingService.CUMULATIVE_VALUE";
 
     @Override
     public void onCreate() {
@@ -42,8 +47,8 @@ public class SamplingService extends Service implements SensorEventListener {
         // in case the activity-level service management fails
         stopSampling();
 
-        // set the sample rate
-        rate = SensorManager.SENSOR_DELAY_NORMAL;
+        // set the sample rate to a suitable level
+        rate = SensorManager.SENSOR_DELAY_UI;
 
         // get sensor manager and start sampling data
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
@@ -70,7 +75,6 @@ public class SamplingService extends Service implements SensorEventListener {
                 accuracy == SensorManager.SENSOR_STATUS_NO_CONTACT ||
                 accuracy == SensorManager.SENSOR_STATUS_UNRELIABLE) {
             Log.w(LOG_TAG, "Sensor " + sensor.getName() + " accuracy is low, need to recalibrate");
-            // TODO: allow for sensor recalibration
         } else {
             Log.d(LOG_TAG, "Sensor " + sensor.getName() + " accuracy has changed, but is medium or high. Let's not do anything for the time being.");
         }
@@ -111,18 +115,13 @@ public class SamplingService extends Service implements SensorEventListener {
         List<Sensor> sensors = sensorManager.getSensorList(Sensor.TYPE_LINEAR_ACCELERATION);
         accelSensor = sensors.size() == 0 ? null : sensors.get(0);
 
-        // get the gyroscope sensor (if it exists)
-        sensors = sensorManager.getSensorList(Sensor.TYPE_GYROSCOPE);
-        gyroSensor = sensors.size() == 0 ? null : sensors.get(0);
-
-        if ((accelSensor != null) && (gyroSensor != null)) {
+        if (accelSensor != null) {
             // if we got both of the sensor, go ahead and register listeners
             Log.d(LOG_TAG, "Register listener");
             sensorManager.registerListener(this, accelSensor, rate);
-            sensorManager.registerListener(this, gyroSensor, rate);
         } else {
             // if either of the sensors are missing, we can't get the data we need
-            Log.e(LOG_TAG, "Sensor(s) missing: accelSensor: " + accelSensor + "; gyroSensor: " + gyroSensor);
+            Log.e(LOG_TAG, "Sensor(s) missing: accelSensor: " + accelSensor);
         }
 
         samplingStarted = true;
@@ -139,32 +138,32 @@ public class SamplingService extends Service implements SensorEventListener {
             return;
         }
 
-        // break down the directions
+        // get the axes
+        float x = values[0];
+        float y = values[1];
+        float z = values[2];
 
-        String sensorName = "n/a";
-        if (sensorEvent.sensor == accelSensor) {
-            sensorName = "accel";
+        // normalize the 3D accelerometer data into just one value
+        float normAccel = FloatMath.floor(FloatMath.sqrt(x * x + y * y + z * z));
+        float scaledAccel = normAccel * 10;
+        cumulative += normAccel * 0.01; // scale this back so we have more interesting numbers to look at
 
-            float x = values[0];
-            float y = values[1];
-            float z = values[2];
-
-            float currentAccel = FloatMath.sqrt(x * x + y * y + z * z) * 10;
-            sendResult(currentAccel);
-        } else if (sensorEvent.sensor == gyroSensor) {
-            sensorName = "gyro";
-        }
-
-        //Log.i(LOG_TAG, sensorName + ": (" + sensorEvent.timestamp + "), " + values[0] + ", " + values[1] + ", " + values[2]);
+        // broadcast the calculated value
+        sendResult(scaledAccel, cumulative);
 
         updateSampleCounter();
-
-
     }
 
-    public void sendResult(float message) {
+    /**
+     * Broadcast motion value for receiver to handle
+     *
+     * @param sample Float of the current sample value
+     * @param cumulative Float of the cumulative values since app started
+     */
+    public void sendResult(float sample, float cumulative) {
         Intent intent = new Intent(SAMPLE_RESULT);
-        intent.putExtra(SAMPLE_MESSAGE, message);
+        intent.putExtra(SAMPLE_VALUE, sample);
+        intent.putExtra(CUMULATIVE_VALUE, cumulative);
         broadcaster.sendBroadcast(intent);
     }
 

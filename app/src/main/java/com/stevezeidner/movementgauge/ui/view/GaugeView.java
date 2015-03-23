@@ -51,7 +51,7 @@ public class GaugeView extends View {
     private float needlePosition = 0.0f;
     private float needleTarget = centerDegree;
     private float needleVelocity = 0.0f;
-    private float needleAcceleration = 0.0f;
+    private float needleAcceleration = 1.0f;
     private long lastNeedleMoveTime = -1L;
 
     public GaugeView(Context context) {
@@ -98,7 +98,7 @@ public class GaugeView extends View {
 
         facePaint = new Paint();
         facePaint.setAntiAlias(true);
-        facePaint.setColor(getResources().getColor(R.color.face));
+        facePaint.setColor(getResources().getColor(R.color.face_instantaneous));
         facePaint.setStyle(Paint.Style.FILL);
 
         float scaleSize = 0.15f;
@@ -161,9 +161,6 @@ public class GaugeView extends View {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        Log.d(TAG, "Width spec: " + MeasureSpec.toString(widthMeasureSpec));
-        Log.d(TAG, "Height spec: " + MeasureSpec.toString(heightMeasureSpec));
-
         int widthMode = MeasureSpec.getMode(widthMeasureSpec);
         int widthSize = MeasureSpec.getSize(widthMeasureSpec);
 
@@ -351,6 +348,12 @@ public class GaugeView extends View {
             value = maxDegrees;
         }
         needleTarget = value;
+        invalidate();
+    }
+
+    public void setFaceColor(int color) {
+        facePaint.setColor(color);
+        regenerateBackground();
         invalidate();
     }
 
