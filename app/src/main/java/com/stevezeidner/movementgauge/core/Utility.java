@@ -3,6 +3,7 @@ package com.stevezeidner.movementgauge.core;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.os.Build;
+import android.util.FloatMath;
 
 import java.math.BigDecimal;
 import java.util.Random;
@@ -52,6 +53,7 @@ public class Utility {
 
     /**
      * Generate a random number between two values
+     *
      * @param low
      * @param high
      * @return
@@ -59,5 +61,17 @@ public class Utility {
     public static int randomBetween(int low, int high) {
         Random r = new Random();
         return r.nextInt(high - low) + low;
+    }
+
+    /**
+     * Get total acceleration from 3-axis of acceleration
+     *
+     * @param x
+     * @param y
+     * @param z
+     * @return
+     */
+    public static float totalAcceleration(float x, float y, float z) {
+        return FloatMath.sqrt(x * x + y * y + z * z);
     }
 }

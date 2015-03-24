@@ -297,7 +297,7 @@ public class MainActivity extends ActionBarActivity {
      *
      * @param value float value to write to shared prefs
      */
-    private void writeCumulative(float value) {
+    public void writeCumulative(float value) {
         SharedPreferences sharedPref = getPreferences(Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = sharedPref.edit();
         editor.putFloat(Constants.CUMULATIVE_PREFS_KEY, value);
@@ -309,7 +309,7 @@ public class MainActivity extends ActionBarActivity {
      *
      * @return float of cumulative value from stored shared prefs
      */
-    private float readCumulative() {
+    public float readCumulative() {
         SharedPreferences sharedPref = getPreferences(Context.MODE_PRIVATE);
         return sharedPref.getFloat(Constants.CUMULATIVE_PREFS_KEY, 0);
     }

@@ -13,6 +13,7 @@ import android.util.FloatMath;
 import android.util.Log;
 
 import com.stevezeidner.movementgauge.core.Constants;
+import com.stevezeidner.movementgauge.core.Utility;
 
 import java.util.List;
 
@@ -41,7 +42,8 @@ public class SamplingService extends Service implements SensorEventListener {
         Log.d(LOG_TAG, "onStartCommand");
 
         // get the cumulative value from the intent
-        cumulative = intent.getFloatExtra(Constants.CUMULATIVE_STARTUP_VALUE, 0.0f);;
+        cumulative = intent.getFloatExtra(Constants.CUMULATIVE_STARTUP_VALUE, 0.0f);
+        ;
 
         // in case the activity-level service management fails
         stopSampling();
@@ -125,6 +127,7 @@ public class SamplingService extends Service implements SensorEventListener {
 
     /**
      * Do something interesting with the event sample
+     *
      * @param sensorEvent
      */
     private void processSample(SensorEvent sensorEvent) {
@@ -139,7 +142,7 @@ public class SamplingService extends Service implements SensorEventListener {
         float z = values[2];
 
         // normalize the 3D accelerometer data into just one value
-        float normAccel = FloatMath.sqrt(x * x + y * y + z * z);
+        float normAccel = Utility.totalAcceleration(x, y, z);
         float scaledAccel = FloatMath.floor(normAccel * 10);
         cumulative += FloatMath.floor(normAccel) * 0.01; // scale this back so we have more interesting numbers to look at
 
@@ -150,10 +153,10 @@ public class SamplingService extends Service implements SensorEventListener {
     /**
      * Broadcast motion value for receiver to handle
      *
-     * @param sample Float of the current sample value
+     * @param sample     Float of the current sample value
      * @param cumulative Float of the cumulative values since app started
      */
-    public void sendResult(float sample, float cumulative, long timestamp) {
+    private void sendResult(float sample, float cumulative, long timestamp) {
         Intent intent = new Intent(Constants.SAMPLE_RESULT);
         intent.putExtra(Constants.TIMESTAMP_VALUE, timestamp);
         intent.putExtra(Constants.SAMPLE_VALUE, sample);
